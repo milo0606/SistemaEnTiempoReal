@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lista de Tareas en Tiempo Real</title>
+  <!-- Agregar la referencia a Bootstrap CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+
+    .container {
+      margin-top: 50px;
+    }
+
+    .task-list {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    .task-item {
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: grab;
+    }
+
+    .task-buttons button {
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="mb-4">Lista de Tareas en Tiempo Real</h1>
+    <ul id="taskList" class="task-list"></ul>
+    <div class="input-group mt-3">
+      <input type="text" id="taskInput" class="form-control" placeholder="Agregar nueva tarea...">
+      <div class="input-group-append">
+        <button class="btn btn-primary" type="button" onclick="addTask()">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agregar la referencia a Bootstrap JS y Popper.js -->
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
+  <script>
+    const socket = new WebSocket('ws://localhost:3000');
+    const taskList = document.getElementById('taskList');
+    const taskInput = document.getElementById('taskInput');
+
+    // Evento cuando se recibe un mensaje del servidor
+    socket.addEventListener('message', (event) => {
+      const tasks = JSON.parse(event.data);
+      renderTasks(tasks);
+    });
+
+    function addTask() {
+      const text = taskInput.value;
+      if (text.trim() !== '') {
+        const message = JSON.stringify({ type: 'add', text });
+        socket.send(message);
+        taskInput.value = '';
+      }
+    }
+
+    function editTask(id) {
+      const text = prompt('Editar tarea:', taskList.querySelector(`#task-${id}`).textContent);
+      if (text !== null) {
+        const message = JSON.stringify({ type: 'edit', id, text });
+        socket.send(message);
+      }
+    }
+
+    function deleteTask(id) {
+      const confirmDelete = confirm('¿Eliminar esta tarea?');
+      if (confirmDelete) {
+        const message = JSON.stringify({ type: 'delete', id });
+        socket.send(message);
+      }
+    }
+
+    function renderTasks(tasks) {
+      taskList.innerHTML = '';
+      tasks.forEach((task) => {
+        const li = document.createElement('li');
+        li.id = `task-${task.id}`;
+        li.className = 'task-item list-group-item d-flex justify-content-between align-items-center';
+        li.textContent = task.text;
+
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.className = 'task-buttons';
+
+        const editButton = document.createElement('button');
+        editButton.className = 'btn btn-warning btn-sm';
+        editButton.textContent = 'Editar';
+        editButton.onclick = () => editTask(task.id);
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn btn-danger btn-sm';
+        deleteButton.textContent = 'Eliminar';
+        deleteButton.onclick = () => deleteTask(task.id);
+
+        buttonsDiv.appendChild(editButton);
+        buttonsDiv.appendChild(deleteButton);
+
+        li.appendChild(buttonsDiv);
+        taskList.appendChild(li);
+
+        // Agregar eventos de arrastrar y soltar
+        li.draggable = true;
+        li.addEventListener('dragstart', handleDragStart);
+        li.addEventListener('dragover', handleDragOver);
+        li.addEventListener('drop', handleDrop);
+      });
+    }
+
+    let draggedTaskId = null;
+
+    function handleDragStart(event) {
+      event.dataTransfer.setData('text/plain', event.target.id);
+      draggedTaskId = event.target.id.split('-')[1];
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault();
+      const targetTaskId = event.target.id.split('-')[1];
+      if (draggedTaskId !== targetTaskId) {
+        event.target.classList.add('drag-over');
+      }
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      const targetTaskId = event.target.id.split('-')[1];
+      event.target.classList.remove('drag-over');
+      if (draggedTaskId !== targetTaskId) {
+        const message = JSON.stringify({ type: 'move', from: draggedTaskId, to: targetTaskId });
+        socket.send(message);
+      }
+    }
+  </script>
+</body>
+</html>
